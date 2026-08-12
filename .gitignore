@@ -2,3 +2,5 @@
 data.js
 _site/
 *.output
+# doc interno de deploy (não vai pro repo público)
+DEPLOY.md

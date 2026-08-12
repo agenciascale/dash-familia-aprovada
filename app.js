@@ -52,8 +52,10 @@
   function diffDays(a, b) { return Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5); }
 
   /* ---------------------------------------------------------------- período */
-  var minDate = daily.length ? daily[0].d : '2026-01-01';
-  var maxDate = daily.length ? daily[daily.length - 1].d : '2026-01-01';
+  var _today = new Date().toISOString().slice(0, 10);
+  var minDate = daily.length ? daily[0].d : ((D.launch && D.launch.startDate) || _today);
+  var maxDate = daily.length ? daily[daily.length - 1].d : _today;
+  if (maxDate < minDate) maxDate = minDate;
   function firstOfMonth(ds) { return ds.slice(0, 7) + '-01'; }
   function clampD(ds) { return ds < minDate ? minDate : (ds > maxDate ? maxDate : ds); }
 
@@ -426,6 +428,7 @@
       '<div class="hv">' + M.x(roasProj) + '</div>' +
       '<div class="hd">vs LTV ' + M.money0(LTV) + ' · ingresso ' + M.x(roasTicket) + ' (R$' + int(TICKET) + ')</div></div>' +
       '</div>' +
+      ((t.spend === 0 && t.vendas === 0) ? '<div class="scopenote" style="margin-top:10px">⏳ <b>Aguardando os primeiros dados da campanha</b> (AGO26PC) — a dash preenche sozinha assim que houver gasto no Adveronix e vendas na planilha Tutory.</div>' : '') +
       '<p class="hero-line" style="margin:12px 0 0">CPA lido contra o <b>LTV de ' + M.money0(LTV) + '</b> (conversão p/ mentoria), não contra o ingresso de ' + M.money0(TICKET) + ' — por isso o CPA meta de ' + M.money0(CPA_TARGET) + ' fecha com folga. Estes números são do <b>lançamento inteiro</b> (independem do período selecionado abaixo).</p>' +
       '</div>';
   }
@@ -928,6 +931,5 @@
   TIP = $('tip');
   var rt;
   addEventListener('resize', function () { clearTimeout(rt); rt = setTimeout(function () { if (daily.length) refresh(); }, 180); });
-  if (!daily.length) { $('overviewView').innerHTML = '<div class="panel"><div class="loading">Sem dados. Rode o build.</div></div>'; }
-  else shell();
+  shell();   // renderiza mesmo zerado — mostra o banner do lançamento aguardando os dados
 })();
