@@ -15,9 +15,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Gerar data.js (le Adveronix + Hotmart via gviz)
+      - name: Gerar data.js (le Adveronix + Tutory via gviz)
         shell: powershell
         run: .\build.ps1 -Mode all
+      - name: Configurar Pages (auto-habilita no 1o run)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Montar _site (so arquivos publicos - sem CSV/PII)
         shell: powershell
         run: |
