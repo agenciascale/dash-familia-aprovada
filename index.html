@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Família Aprovada — A Próxima Carreira · Dashboard</title>
+<link rel="stylesheet" href="styles.css?v=fa1">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1 id="title">A Próxima Carreira — Lançamento · Família Aprovada</h1>
+      <p class="sub" id="subtitle"><b>Sala Secreta · venda direta</b> · ingressos vs meta · carregando…</p>
+    </div>
+    <div class="top-right">
+      <span class="badge tax" id="taxBadge" title="Imposto do Meta Ads aplicado sobre o gasto bruto">imposto —</span>
+      <span class="badge"><span class="dot"></span><span id="updated">—</span></span>
+      <button class="btn" id="refresh" title="Buscar a última versão publicada dos dados">🔄 Atualizar</button>
+      <button class="btn" id="theme" title="Alternar tema claro/escuro">Claro</button>
+    </div>
+  </header>
+
+  <div class="viewtabs" role="tablist" aria-label="Visão">
+    <button data-tab="overview" role="tab">📊 Visão Geral</button>
+    <button data-tab="traffic" role="tab">🎯 Tráfego Pago</button>
+    <button data-tab="report" role="tab">📄 Relatório</button>
+  </div>
+
+  <div class="controls">
+    <div class="grp">
+      <label>Período</label>
+      <button class="btn" data-preset="today">Hoje</button>
+      <button class="btn" data-preset="yesterday">Ontem</button>
+      <button class="btn" data-preset="7">7 dias</button>
+      <button class="btn" data-preset="14">14 dias</button>
+      <button class="btn" data-preset="30">30 dias</button>
+      <button class="btn" data-preset="month">Este mês</button>
+      <button class="btn" data-preset="all">Tudo</button>
+    </div>
+    <div class="grp">
+      <input type="date" id="from">
+      <span style="color:var(--ink-3)">até</span>
+      <input type="date" id="to">
+    </div>
+    <div class="spacer"></div>
+    <div class="grp">
+      <button class="btn on" id="cmp" aria-pressed="true">Comparar c/ período anterior</button>
+      <span class="rangelbl" id="cmpNote"></span>
+    </div>
+  </div>
+
+  <div class="controls camprow">
+    <div class="grp">
+      <label>Campanha</label>
+      <div class="dd" id="campWrap">
+        <button class="btn" id="campBtn" aria-haspopup="true" aria-expanded="false">Todas as campanhas ▾</button>
+        <div class="dd-panel" id="campPanel" hidden></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="filterBar"></div>
+  <div id="overviewView"></div>
+  <div id="trafficView" hidden></div>
+  <div id="reportView" hidden></div>
+
+  <footer id="footer"></footer>
+</div>
+
+<div id="tip" role="tooltip"></div>
+
+<script>var _t=Date.now();document.write('<scr'+'ipt src="data.js?t='+_t+'"><\/scr'+'ipt>');document.write('<scr'+'ipt src="app.js?v=fa1&t='+_t+'"><\/scr'+'ipt>');</script>
+</body>
+</html>

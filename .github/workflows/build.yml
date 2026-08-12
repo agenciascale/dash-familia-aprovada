@@ -1,0 +1,38 @@
+name: build-deploy
+on:
+  workflow_dispatch:            # <- cron-job.org dispara isto a cada 3h
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gerar data.js (le Adveronix + Hotmart via gviz)
+        shell: powershell
+        run: .\build.ps1 -Mode all
+      - name: Montar _site (so arquivos publicos - sem CSV/PII)
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force _site | Out-Null
+          Copy-Item index.html,app.js,styles.css,data.js _site\
+          New-Item -ItemType File -Force _site\.nojekyll | Out-Null
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
