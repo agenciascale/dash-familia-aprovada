@@ -33,8 +33,9 @@ $GID_VENDAS    = "0"
 $TAX           = 1.1385   # imposto Meta Ads
 
 # Filtro do LANCAMENTO: nome/utm_campaign contem qualquer um destes (case/acento-insensitive).
-# Prefixo padrao da nomenclatura: AGO26PC = "AGO/26 Proxima Carreira".
-$LAUNCH_KEYS   = @("AGO26PC")
+# Prefixo real da campanha que subiu: AGO26APC = "AGO/26 A Proxima Carreira".
+# (o brief previa AGO26PC, mas a campanha subiu com o "A" de "A Proxima Carreira": AGO26APC)
+$LAUNCH_KEYS   = @("AGO26APC")
 
 # Metas do lancamento (brief): ingresso R$47, LTV R$467, CPA meta R$61 / limite R$100,
 # meta 228 ingressos / piso 150, verba R$15.000, captacao 12/08 a 27/08.
