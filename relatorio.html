@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Família Aprovada — A Próxima Carreira · Dashboard</title>
+<title>Relatório interno — A Próxima Carreira · Família Aprovada</title>
 <link rel="stylesheet" href="styles.css?v=fa1">
 </head>
 <body>
@@ -12,8 +12,8 @@
 
   <header class="top">
     <div>
-      <h1 id="title">A Próxima Carreira — Lançamento · Família Aprovada</h1>
-      <p class="sub" id="subtitle"><b>Sala Secreta · venda direta</b> · ingressos vs meta · carregando…</p>
+      <h1 id="title">Relatório interno — A Próxima Carreira</h1>
+      <p class="sub" id="subtitle"><b>🔒 Uso interno do gestor</b> · não compartilhar com o cliente · carregando…</p>
     </div>
     <div class="top-right">
       <span class="badge tax" id="taxBadge" title="Imposto do Meta Ads aplicado sobre o gasto bruto">imposto —</span>
@@ -26,6 +26,7 @@
   <div class="viewtabs" role="tablist" aria-label="Visão">
     <button data-tab="overview" role="tab">📊 Visão Geral</button>
     <button data-tab="traffic" role="tab">🎯 Tráfego Pago</button>
+    <button data-tab="report" role="tab">📄 Relatório</button>
   </div>
 
   <div class="controls">
@@ -64,12 +65,14 @@
   <div id="filterBar"></div>
   <div id="overviewView"></div>
   <div id="trafficView" hidden></div>
+  <div id="reportView" hidden></div>
 
   <footer id="footer"></footer>
 </div>
 
 <div id="tip" role="tooltip"></div>
 
+<script>window.FA_DEFAULT_TAB='report';</script>
 <script>var _t=Date.now();document.write('<scr'+'ipt src="data.js?t='+_t+'"><\/scr'+'ipt>');document.write('<scr'+'ipt src="app.js?v=fa1&t='+_t+'"><\/scr'+'ipt>');</script>
 </body>
 </html>
