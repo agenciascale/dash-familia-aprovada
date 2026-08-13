@@ -60,7 +60,7 @@
   function clampD(ds) { return ds < minDate ? minDate : (ds > maxDate ? maxDate : ds); }
 
   var STATE = {
-    from: minDate, to: maxDate, preset: 'all', compare: true, tab: 'overview',
+    from: firstOfMonth(maxDate), to: maxDate, preset: 'month', compare: true, tab: 'overview',
     metric: 'spend', treeSort: { key: 'spend', dir: -1 }, expanded: {}, camps: null
   };
   // lista de campanhas presentes (por gasto desc)
@@ -917,7 +917,7 @@
     });
 
     initCampSelector();
-    setPeriod(minDate, maxDate, 'all');
+    setPeriod(firstOfMonth(maxDate), maxDate, 'month');   // abre sempre em "Este mês" (evita cair no historico antigo do cliente)
   }
 
   /* ---------------------------------------------------------------- tema */
