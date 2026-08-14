@@ -37,6 +37,12 @@ $TAX           = 1.1385   # imposto Meta Ads
 # (o brief previa AGO26PC, mas a campanha subiu com o "A" de "A Proxima Carreira": AGO26APC)
 $LAUNCH_KEYS   = @("AGO26APC")
 
+# Filtro do lancamento nas VENDAS (Tutory): o checkout NAO repassa UTM (utm_campaign vem VAZIO),
+# entao nao da pra atribuir venda->campanha por utm. Como a planilha Tutory e dedicada a este
+# lancamento, casamos a venda pelo PRODUTO. Se o utm_campaign vier preenchido no futuro, ele
+# ainda e usado pra atribuicao por campanha (salesList).
+$PRODUCT_KEYS  = @("SALA SECRETA", "PROXIMA")
+
 # Metas do lancamento (brief): ingresso R$47, LTV R$467, CPA meta R$61 / limite R$100,
 # meta 228 ingressos / piso 150, verba R$15.000, captacao 12/08 a 27/08.
 $LAUNCH = [ordered]@{
@@ -114,6 +120,14 @@ function IsLaunch($name) {
   return $false
 }
 
+# venda pertence ao lancamento? utm_campaign casa OU o produto casa (Tutory nao repassa UTM).
+function IsLaunchSale($utmCamp, $product) {
+  if (IsLaunch $utmCamp) { return $true }
+  $p = Norm $product
+  foreach ($k in $PRODUCT_KEYS) { if ($p.Contains((Norm $k))) { return $true } }
+  return $false
+}
+
 # acha o indice da 1a coluna cujo cabecalho (normalizado) casa $include e nao casa $exclude
 function ColIdx($hdr, $include, $exclude) {
   for ($i = 0; $i -lt $hdr.Count; $i++) {
@@ -187,7 +201,8 @@ if ($v.Count -ge 1) {
   $jCont = ColIdx $HV 'UTM.?CONTENT' $null
   $jTerm = ColIdx $HV 'UTM.?TERM' $null
   $jFat  = ColIdx $HV 'FATURAMENTO|VALOR|VALUE|AMOUNT|PRICE|TOTAL' 'UTM'
-  Write-Host ("  colunas vendas: dt={0} utm_campaign={1} utm_content={2} utm_term={3} fat={4}" -f $jDt,$jCamp,$jCont,$jTerm,$jFat)
+  $jProd = ColIdx $HV 'PRODUTO|PRODUCT|OFERTA|PLANO' $null
+  Write-Host ("  colunas vendas: dt={0} utm_campaign={1} utm_content={2} utm_term={3} fat={4} prod={5}" -f $jDt,$jCamp,$jCont,$jTerm,$jFat,$jProd)
   $skipHdr = $true
   foreach ($r in $v) {
     if ($skipHdr) { $skipHdr = $false; continue }
@@ -197,14 +212,17 @@ if ($v.Count -ge 1) {
     elseif ($dt -match '^(\d{2})/(\d{2})/(\d{4})') { $day = "{0}-{1}-{2}" -f $matches[3], $matches[2], $matches[1] }
     else { continue }
     $utmCamp = UtmDecode (Cell $r $jCamp)
-    # so conta venda do lancamento (utm_campaign contem AGO26PC). Se utm vazio, NAO atribui ao lancamento.
-    if (-not (IsLaunch $utmCamp)) { continue }
+    $prod    = ("$(Cell $r $jProd)").Trim()
+    # conta venda do lancamento: utm_campaign casa (AGO26APC) OU produto casa (Tutory nao repassa UTM).
+    if (-not (IsLaunchSale $utmCamp $prod)) { continue }
     $fat = (ToNum (Cell $r $jFat))
     if (-not $dv.ContainsKey($day)) { $dv[$day] = @{ vendas=0; fat=0.0 } }
     $dv[$day].vendas += 1; $dv[$day].fat += $fat
+    # atribuicao por campanha (reserva front): usa utm_campaign; se vazio, rotula "(sem utm)".
+    $campKey = if ($utmCamp -ne "") { $utmCamp } else { "(sem utm)" }
     if (-not $salesCamp.ContainsKey($day)) { $salesCamp[$day] = @{} }
-    if (-not $salesCamp[$day].ContainsKey($utmCamp)) { $salesCamp[$day][$utmCamp] = @{ vendas=0; fat=0.0 } }
-    $salesCamp[$day][$utmCamp].vendas += 1; $salesCamp[$day][$utmCamp].fat += $fat
+    if (-not $salesCamp[$day].ContainsKey($campKey)) { $salesCamp[$day][$campKey] = @{ vendas=0; fat=0.0 } }
+    $salesCamp[$day][$campKey].vendas += 1; $salesCamp[$day][$campKey].fat += $fat
     if ((UtmDecode (Cell $r $jCont)) -ne "") { $attrAd++ }
   }
 }
