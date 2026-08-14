@@ -22,7 +22,7 @@ jobs:
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force _site | Out-Null
-          Copy-Item index.html,app.js,styles.css,data.js _site\
+          Copy-Item index.html,relatorio.html,app.js,styles.css,data.js _site\
           New-Item -ItemType File -Force _site\.nojekyll | Out-Null
       - uses: actions/upload-pages-artifact@v3
         with:
