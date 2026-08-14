@@ -116,6 +116,7 @@
     o.ticket = div(fat, vendas);
     o.convCheck = div(vendas, ic);        // conversão checkout → venda
     o.lpCheck = div(ic, t.lpv);           // LP → checkout
+    o.lpBuy = div(vendas, t.lpv);         // LP → compra (page view → venda)
     o.resultado = (fat || 0) - (t.spend || 0); // caixa (fat − invest. total)
     return o;
   }
@@ -439,18 +440,20 @@
     var pTo = dayAdd(from, -1), pFrom = dayAdd(pTo, -(len - 1));
     var cur = aggregate(from, to), prev = STATE.compare ? aggregate(pFrom, pTo) : null;
 
-    var h = health(cur), sc = scoreColor(h.score);
-    var healthHTML = gauge(h.score, sc) +
-      '<div><p class="health-head">Saúde do funil' +
-      '<span class="tag" style="background:color-mix(in srgb,' + sc + ' 20%,transparent);color:' + sc + '">' + h.band + '</span>' +
-      '<span style="font-size:11.5px;font-weight:500;color:var(--ink-3);margin-left:6px">' + (h.score == null ? '—' : h.score + '/100') + ' · pela sua régua de benchmarks</span></p>' +
-      '<div class="hbars" style="margin-top:12px">' + h.bars.map(function (b) {
-        var col = b.score == null ? 'var(--ink-3)' : scoreColor(b.score);
-        var w = b.score == null ? 0 : Math.max(0, Math.min(100, b.score));
-        var lim = b.band.dir === 'high' ? 'bom ≥ ' + b.band.fmt(b.band.good) : 'bom ≤ ' + b.band.fmt(b.band.good);
-        return '<div class="hbar"><div class="hb-top"><em>' + b.label + ' <span style="color:var(--ink-3);font-weight:500">· ' + lim + '</span></em><strong>' + b.valueStr + '</strong></div>' +
-          '<div class="hb-track"><div class="hb-fill" style="width:' + w.toFixed(0) + '%;background:' + col + '"></div></div></div>';
-      }).join('') + '</div></div>';
+    // Taxas de conversão do funil (médias do período) — SEM benchmark/nota.
+    // Ainda é cedo pra classificar pela régua; mostramos as taxas do próprio funil pra ir criando histórico.
+    var rateRows = [
+      { lbl: 'Impressão → Clique', hint: 'CTR (link)', v: cur.ctr, a: cur.clk, b: cur.impr, fmt: M.pct1 },
+      { lbl: 'Clique → Page view', hint: 'conexão', v: cur.connect, a: cur.lpv, b: cur.clk, fmt: M.pct1 },
+      { lbl: 'Page view → Checkout', hint: 'taxa de LP → checkout', v: cur.lpCheck, a: cur.ic, b: cur.lpv, fmt: M.pct1 },
+      { lbl: 'Checkout → Venda', hint: 'checkout → compra', v: cur.convCheck, a: cur.vendas, b: cur.ic, fmt: M.pct1 },
+      { lbl: 'Page view → Venda', hint: 'taxa de LP → compra', v: cur.lpBuy, a: cur.vendas, b: cur.lpv, fmt: M.pct1 }
+    ];
+    var ratesHTML = rateRows.map(function (r) {
+      return '<div class="kpi"><div class="k">' + r.lbl + '</div>' +
+        '<div class="v sm">' + (ok(r.v) ? r.fmt(r.v) : '—') + '</div>' +
+        '<div class="d"><span>' + int(r.a) + ' de ' + int(r.b) + ' · ' + r.hint + '</span></div></div>';
+    }).join('');
 
     var flt = cur.filtered;
     var invVal = flt ? cur.spend : cur.spendVenda, invPrev = prev && (flt ? prev.spend : prev.spendVenda), invLbl = flt ? 'filtrado' : 'em venda';
@@ -473,7 +476,9 @@
 
     var overview =
       launchBanner() +
-      '<div class="panel"><div class="health" id="health">' + healthHTML + '</div></div>' +
+      '<div class="panel"><h2>Taxas de conversão do funil <span style="font-weight:500;color:var(--ink-3)">— médias do período</span></h2>' +
+      '<p class="note">Taxas do próprio funil, etapa a etapa. Sem classificação por benchmark ainda — enquanto o histórico do cliente não amadurece, aqui ficam só os números pra acompanhar a evolução.</p>' +
+      '<div class="kpis" style="margin-bottom:0">' + ratesHTML + '</div></div>' +
       '<div class="hero" id="hero">' + heroHTML + '</div>' +
       '<p class="hero-line" style="margin-bottom:10px">' + heroLine + '</p>' +
       '<div class="scopenote"><span>' + (flt
@@ -537,20 +542,15 @@
     $('funilInv').innerHTML = cards.join('');
   }
   function renderFunnel(c) {
-    // pinta o valor da métrica pela régua do nicho (verde/amarelo/vermelho)
-    function paint(k, v) {
-      var st = statusOf(v, BANDS[k]); if (!st) return BANDS[k].fmt(v);
-      var tok = st.cls === 'g' ? '--good' : st.cls === 'y' ? '--warning' : '--critical';
-      var txt = st.cls === 'g' ? '--good-text' : st.cls === 'y' ? '--warn-text' : '--critical';
-      return '<span class="cell-scale" style="background:color-mix(in srgb,var(' + tok + ') 20%,transparent);color:var(' + txt + ');font-weight:600">' + BANDS[k].fmt(v) + '</span>';
-    }
+    // taxa de passagem em % pura (sem classificação por benchmark)
+    var pctOr = function (v) { return ok(v) ? M.pct1(v) : '—'; };
     var stages = [
       { n: 'Investimento', big: M.money(c.spend), bg: '#8fe01e', ink: '#0c1400', cl: 'Gasto bruto', cv: M.money(c.spend / TAX), sub: '+ imposto ×' + taxStr(TAX) + ' = <b>' + M.money(c.spend) + '</b>' },
-      { n: 'Impressões', big: M.int(c.impr), bg: '#7ecb1c', ink: '#0c1400', cl: 'CPM ' + flagFor('cpm', c.cpm), cv: paint('cpm', c.cpm), sub: 'CTR (link) ' + paint('ctr', c.ctr) },
-      { n: 'Cliques', big: M.int(c.clk), bg: '#63b015', ink: '#0c1400', cl: 'CPC ' + flagFor('cpc', c.cpc), cv: paint('cpc', c.cpc), sub: 'Clique → Page view ' + paint('connect', c.connect) },
-      { n: 'Page views', big: M.int(c.lpv), bg: '#4a8a0a', ink: '#fff', cl: 'Custo / Page view', cv: M.money(c.cpl), sub: 'Page view → Checkout ' + paint('lpCheck', c.lpCheck) },
-      { n: 'Checkouts (IC)', big: M.int(c.ic), bg: '#356606', ink: '#fff', cl: 'Custo / Checkout ' + flagFor('cpic', c.cpic), cv: paint('cpic', c.cpic), sub: 'Checkout → Venda ' + paint('convCheck', c.convCheck) },
-      { n: 'Ingressos (Tutory)', big: M.int(c.vendas), bg: '#244a04', ink: '#fff', cl: 'CPA ' + flagFor('cac', c.cac), cv: paint('cac', c.cac), sub: 'ROAS proj. <b>' + M.x(div(c.vendas * LTV, c.spend)) + '</b> · ticket <b>' + M.money(c.ticket) + '</b>' }
+      { n: 'Impressões', big: M.int(c.impr), bg: '#7ecb1c', ink: '#0c1400', cl: 'CPM', cv: M.money(c.cpm), sub: 'CTR (link) <b>' + pctOr(c.ctr) + '</b>' },
+      { n: 'Cliques', big: M.int(c.clk), bg: '#63b015', ink: '#0c1400', cl: 'CPC', cv: M.money(c.cpc), sub: 'Clique → Page view <b>' + pctOr(c.connect) + '</b>' },
+      { n: 'Page views', big: M.int(c.lpv), bg: '#4a8a0a', ink: '#fff', cl: 'Custo / Page view', cv: M.money(c.cpl), sub: 'Page view → Checkout <b>' + pctOr(c.lpCheck) + '</b>' },
+      { n: 'Checkouts (IC)', big: M.int(c.ic), bg: '#356606', ink: '#fff', cl: 'Custo / Checkout', cv: M.money(c.cpic), sub: 'Checkout → Venda <b>' + pctOr(c.convCheck) + '</b>' },
+      { n: 'Ingressos (Tutory)', big: M.int(c.vendas), bg: '#244a04', ink: '#fff', cl: 'CPA', cv: M.money(c.cac), sub: 'ROAS proj. <b>' + M.x(div(c.vendas * LTV, c.spend)) + '</b> · ticket <b>' + M.money(c.ticket) + '</b>' }
     ];
     $('funnel').innerHTML = stages.map(function (s) {
       return '<div class="fstage"><div class="fl" style="background:' + s.bg + ';color:' + s.ink + '"><div class="fn">' + s.n + '</div><div class="fv">' + s.big + '</div></div>' +
@@ -602,7 +602,7 @@
       kpi('CPC (link)', M.money(cur.cpc), 'bom ≤ R$1,80', flagFor('cpc', cur.cpc)),
       kpi('Cliques', M.int(cur.clk), int(cur.impr) + ' impressões', ''),
       kpi('Connect rate', M.pct1(cur.connect), 'LPV ÷ cliques ⚠️', flagFor('connect', cur.connect)),
-      kpi('Compras (pixel)', M.int(cur.purPixel), 'Adveronix — atribuição', ''),
+      kpi('Vendas', M.int(cur.vendas), 'planilha Tutory', ''),
       kpi('Custo/checkout', M.money(cur.cpic), 'bom ≤ R$18', flagFor('cpic', cur.cpic))
     ];
 
