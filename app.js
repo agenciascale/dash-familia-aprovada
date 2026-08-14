@@ -597,13 +597,13 @@
     function kpi(lbl, val, sub, delta) { return '<div class="kpi"><div class="k">' + lbl + '</div><div class="v sm">' + val + '</div><div class="d">' + (delta || '') + (sub ? '<span>' + sub + '</span>' : '') + '</div></div>'; }
     var kpis = [
       kpi('Investimento', M.money0(cur.spend), 'Topo + Venda', miniDelta(cur.spend, prev && prev.spend, null)),
-      kpi('CPM', M.money(cur.cpm), 'bom ≤ R$28', flagFor('cpm', cur.cpm)),
-      kpi('CTR (link)', M.pct1(cur.ctr), 'bom ≥ 1,8%', flagFor('ctr', cur.ctr)),
-      kpi('CPC (link)', M.money(cur.cpc), 'bom ≤ R$1,80', flagFor('cpc', cur.cpc)),
+      kpi('CPM', M.money(cur.cpm), 'custo / mil impr.', ''),
+      kpi('CTR (link)', M.pct1(cur.ctr), 'cliques ÷ impressões', ''),
+      kpi('CPC (link)', M.money(cur.cpc), 'custo / clique', ''),
       kpi('Cliques', M.int(cur.clk), int(cur.impr) + ' impressões', ''),
-      kpi('Connect rate', M.pct1(cur.connect), 'LPV ÷ cliques ⚠️', flagFor('connect', cur.connect)),
+      kpi('Connect rate', M.pct1(cur.connect), 'LPV ÷ cliques ⚠️', ''),
       kpi('Vendas', M.int(cur.vendas), 'planilha Tutory', ''),
-      kpi('Custo/checkout', M.money(cur.cpic), 'bom ≤ R$18', flagFor('cpic', cur.cpic))
+      kpi('Custo/checkout', M.money(cur.cpic), 'gasto ÷ checkouts', '')
     ];
 
     $('trafficView').innerHTML =
