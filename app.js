@@ -912,7 +912,7 @@
     // abas
     var tabExists = function (t) { return !!document.querySelector('[data-tab="' + t + '"]'); };
     if (window.FA_DEFAULT_TAB && tabExists(window.FA_DEFAULT_TAB)) { STATE.tab = window.FA_DEFAULT_TAB; }   // pagina interna abre no Relatorio
-    else { try { var tv = localStorage.getItem('fa-tab'); if (tabExists(tv)) STATE.tab = tv; } catch (e) { } }   // so aceita aba que existe nesta pagina
+    // ao abrir o link, sempre cai na Visao geral (STATE.tab ja nasce 'overview'; nao restaura a ultima aba)
     Array.prototype.forEach.call(document.querySelectorAll('[data-tab]'), function (b) {
       b.setAttribute('aria-selected', b.dataset.tab === STATE.tab);
       b.onclick = function () {
