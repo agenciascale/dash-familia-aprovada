@@ -491,7 +491,12 @@
       '<h2 style="margin-top:20px">Faturamento × Investimento × ROAS</h2><p class="note">Barras = <b>Faturamento</b> e <b>Investimento</b> (esq., R$) · linha = <b>ROAS</b> (dir.).</p><div class="legend" id="legB"></div><div id="chB"></div></div>' +
       '</div>' +
       '<div class="panel"><h2 id="metricTitle">Investimento por dia</h2><p class="note">Escolha a métrica; com a comparação ligada, a linha tracejada é o período anterior alinhado dia a dia.</p><div class="tabs" id="metricTabs"></div><div class="legend" id="legend"></div><div id="chMetric"></div></div>' +
-      '<div class="panel"><h2>Visão diária — principais métricas por dia</h2><p class="note">Uma linha por dia, mais recente no topo. Heatmap por coluna: <b style="color:var(--good-text)">verde = melhor</b>, <b style="color:var(--critical)">vermelho = pior</b> no período.</p><div class="tblwrap"><table id="dtbl" class="daily"></table></div></div>';
+      '<div class="panel"><h2>Visão diária — principais métricas por dia</h2><p class="note">Uma linha por dia, mais recente no topo. Heatmap por coluna: <b style="color:var(--good-text)">verde = melhor</b>, <b style="color:var(--critical)">vermelho = pior</b> no período.</p>' +
+      '<div class="kpis" style="margin:2px 0 14px">' +
+        '<div class="kpi"><div class="k">Taxa média LP → Checkout</div><div class="v sm">' + (ok(cur.lpCheck) ? M.pct1(cur.lpCheck) : '—') + '</div><div class="d"><span>' + int(cur.ic) + ' checkouts ÷ ' + int(cur.lpv) + ' page views · média ponderada do período</span></div></div>' +
+        '<div class="kpi"><div class="k">Taxa média LP → Compra</div><div class="v sm">' + (ok(cur.lpBuy) ? M.pct1(cur.lpBuy) : '—') + '</div><div class="d"><span>' + int(cur.vendas) + ' vendas ÷ ' + int(cur.lpv) + ' page views · média ponderada do período</span></div></div>' +
+      '</div>' +
+      '<div class="tblwrap"><table id="dtbl" class="daily"></table></div></div>';
 
     $('overviewView').innerHTML = overview;
 
@@ -550,7 +555,7 @@
       { n: 'Cliques', big: M.int(c.clk), bg: '#63b015', ink: '#0c1400', cl: 'CPC', cv: M.money(c.cpc), sub: 'Clique → Page view <b>' + pctOr(c.connect) + '</b>' },
       { n: 'Page views', big: M.int(c.lpv), bg: '#4a8a0a', ink: '#fff', cl: 'Custo / Page view', cv: M.money(c.cpl), sub: 'Page view → Checkout <b>' + pctOr(c.lpCheck) + '</b>' },
       { n: 'Checkouts (IC)', big: M.int(c.ic), bg: '#356606', ink: '#fff', cl: 'Custo / Checkout', cv: M.money(c.cpic), sub: 'Checkout → Venda <b>' + pctOr(c.convCheck) + '</b>' },
-      { n: 'Ingressos (Tutory)', big: M.int(c.vendas), bg: '#244a04', ink: '#fff', cl: 'CPA', cv: M.money(c.cac), sub: 'ROAS proj. <b>' + M.x(div(c.vendas * LTV, c.spend)) + '</b> · ticket <b>' + M.money(c.ticket) + '</b>' }
+      { n: 'Ingressos (Tutory)', big: M.int(c.vendas), bg: '#244a04', ink: '#fff', cl: 'CPA', cv: M.money(c.cac), sub: 'meta ≤ <b>' + M.money0(CPA_TARGET) + '</b> · limite <b>' + M.money0(CPA_LIMIT) + '</b>' }
     ];
     $('funnel').innerHTML = stages.map(function (s) {
       return '<div class="fstage"><div class="fl" style="background:' + s.bg + ';color:' + s.ink + '"><div class="fn">' + s.n + '</div><div class="fv">' + s.big + '</div></div>' +
