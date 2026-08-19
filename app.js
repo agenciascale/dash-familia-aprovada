@@ -12,6 +12,7 @@
   var arr = function (x) { return Array.isArray(x) ? x : (x ? [x] : []); };
   var daily = arr(D.daily).slice().sort(function (a, b) { return a.d < b.d ? -1 : a.d > b.d ? 1 : 0; });
   var grain = arr(D.grain);
+  var salesGrain = arr(D.salesGrain);   // vendas Tutory atribuídas por UTM (camp/adset/anúncio) + bucket "(Sem UTM)"
   var TAX = D.tax || 1.1385;
   // config do lançamento (metas do brief)
   var LC = D.launch || {};
@@ -43,6 +44,8 @@
     x: function (v) { return ok(v) ? x2(v) : '—'; }
   };
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+  // chave normalizada p/ casar nomes (camp/adset/anúncio) entre grain e planilha: maiúsculas, sem acento, espaços colapsados
+  function normKey(s) { return String(s == null ? '' : s).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
   function $(id) { return document.getElementById(id); }
   function div(a, b) { return b > 0 ? a / b : null; }
 
@@ -331,24 +334,35 @@
   }
 
   /* ---------------------------------------------------------------- árvore campanha › conjunto › anúncio (pixel) */
-  function tblank(label) { return { label: label, spend: 0, impr: 0, reach: 0, clk: 0, lpv: 0, pur: 0, val: 0, kids: {} }; }
+  function tblank(label) { return { label: label, spend: 0, impr: 0, reach: 0, clk: 0, lpv: 0, pur: 0, val: 0, sold: 0, soldFat: 0, kids: {} }; }
   function tderive(t) {
     var o = Object.assign({}, t);
     o.cpm = div(t.spend * 1000, t.impr); o.ctr = div(t.clk, t.impr); o.cpc = div(t.spend, t.clk);
     o.cpl = div(t.spend, t.lpv); o.connect = div(t.lpv, t.clk);
-    o.custoCompra = div(t.spend, t.pur); o.roas = div(t.val, t.spend);
+    o.custoCompra = div(t.spend, t.pur); o.roas = div(t.val, t.spend);          // PIXEL (mantido p/ relatório/adsByName)
+    o.soldCusto = t.spend > 0 ? div(t.spend, t.sold) : null; o.soldRoas = div(t.soldFat, t.spend);   // planilha Tutory (UTM) — usado na Otimização (sem gasto atribuído → custo/compra = —)
     return o;
   }
   function buildTree(from, to) {
     var root = {};
+    // índice de vendas da planilha (Tutory, atribuídas por UTM) por camp␟adset␟anúncio (nomes normalizados)
+    var salesIx = {};
+    for (var j = 0; j < salesGrain.length; j++) {
+      var sg = salesGrain[j]; if (!within(sg.d, from, to)) continue;
+      var kk = normKey(sg.camp) + '␟' + normKey(sg.adset) + '␟' + normKey(sg.ad);
+      var oo = salesIx[kk] || (salesIx[kk] = { v: 0, f: 0 }); oo.v += (sg.vendas || 0); oo.f += (sg.fat || 0);
+    }
     for (var i = 0; i < grain.length; i++) {
       var g = grain[i]; if (!within(g.d, from, to)) continue; if (!campOK(g.camp)) continue;
       var c = root[g.camp] || (root[g.camp] = tblank(g.camp));
       var s = c.kids[g.adset] || (c.kids[g.adset] = tblank(g.adset));
       var a = s.kids[g.ad] || (s.kids[g.ad] = tblank(g.ad));
       a.spend += g.spend; a.impr += g.impr; a.reach += g.reach; a.clk += g.clk; a.lpv += g.lpv; a.pur += g.pur; a.val += g.val;
+      // vendas reais da planilha p/ este anúncio (set idempotente: é o total do período pra aquele nome)
+      var sm = salesIx[normKey(g.camp) + '␟' + normKey(g.adset) + '␟' + normKey(g.ad)];
+      a.sold = sm ? sm.v : 0; a.soldFat = sm ? sm.f : 0;
     }
-    var RAW = ['spend', 'impr', 'reach', 'clk', 'lpv', 'pur', 'val'];
+    var RAW = ['spend', 'impr', 'reach', 'clk', 'lpv', 'pur', 'val', 'sold', 'soldFat'];
     function roll(node, key, level) {
       var kids = Object.keys(node.kids).map(function (k) { return roll(node.kids[k], key + ' ▸ ' + k, level + 1); });
       var agg = tblank(node.label);
@@ -357,16 +371,32 @@
       var d = tderive(agg); d.key = key; d.level = level; d.kids = kids;
       return d;
     }
-    return Object.keys(root).map(function (k) { return roll(root[k], k, 0); });
+    var out = Object.keys(root).map(function (k) { return roll(root[k], k, 0); });
+    // linha sintética "(Sem UTM)": vendas reais da planilha sem rastreamento (não atribuíveis a anúncio).
+    // Só aparece sem filtro de campanha, pra a soma da coluna Compras bater com o total do lançamento.
+    if (!campFilterActive()) {
+      var noV = 0, noF = 0;
+      for (var m = 0; m < salesGrain.length; m++) { var x = salesGrain[m]; if (!within(x.d, from, to)) continue; if (normKey(x.camp) === normKey('(Sem UTM)')) { noV += (x.vendas || 0); noF += (x.fat || 0); } }
+      if (noV > 0) {
+        var semNode = tderive(Object.assign(tblank('(Sem UTM) · vendas sem rastreamento'), { sold: noV, soldFat: noF }));
+        semNode.key = '(Sem UTM)'; semNode.level = 0; semNode.kids = [];
+        out.push(semNode);
+      }
+    }
+    return out;
   }
   function adsByName(from, to) {
     var map = {};
+    // vendas reais da planilha por NOME de anúncio (relatório usa venda real, não pixel)
+    var salesByAd = {};
+    for (var s = 0; s < salesGrain.length; s++) { var sg = salesGrain[s]; if (!within(sg.d, from, to)) continue; var ak = normKey(sg.ad); var oo = salesByAd[ak] || (salesByAd[ak] = { v: 0, f: 0 }); oo.v += (sg.vendas || 0); oo.f += (sg.fat || 0); }
     for (var i = 0; i < grain.length; i++) {
       var g = grain[i]; if (!within(g.d, from, to)) continue; if (!campOK(g.camp)) continue;
       var a = map[g.ad] || (map[g.ad] = tblank(g.ad));
       a.spend += g.spend; a.impr += g.impr; a.reach += g.reach; a.clk += g.clk; a.lpv += g.lpv; a.pur += g.pur; a.val += g.val;
+      var sm = salesByAd[normKey(g.ad)]; a.sold = sm ? sm.v : 0; a.soldFat = sm ? sm.f : 0;   // set idempotente (total do período p/ o nome)
     }
-    return Object.keys(map).map(function (k) { return tderive(map[k]); }).filter(function (a) { return a.spend > 0 || a.pur > 0; });
+    return Object.keys(map).map(function (k) { return tderive(map[k]); }).filter(function (a) { return a.spend > 0 || a.sold > 0; });
   }
 
   /* colunas padrão da árvore/tabela diária */
@@ -378,9 +408,9 @@
     { k: 'cpc', label: 'CPC', fmt: M.money, scale: 'low' },
     { k: 'lpv', label: 'LPV', fmt: M.int },
     { k: 'cpl', label: 'Custo/LPV', fmt: M.money, scale: 'low' },
-    { k: 'pur', label: 'Compras (px)', fmt: M.int },
-    { k: 'custoCompra', label: 'Custo/compra', fmt: M.money, scale: 'low' },
-    { k: 'roas', label: 'ROAS (px)', fmt: M.x, scale: 'high' }
+    { k: 'sold', label: 'Compras', fmt: M.int },
+    { k: 'soldCusto', label: 'Custo/compra', fmt: M.money, scale: 'low' },
+    { k: 'soldRoas', label: 'ROAS', fmt: M.x, scale: 'high' }
   ];
 
   /* ---------------------------------------------------------------- lançamento (metas)
@@ -566,8 +596,10 @@
   var DCOLS = [
     { k: 'd', label: 'Dia' }, { k: 'spend', label: 'Invest.', fmt: M.money }, { k: 'cpm', label: 'CPM', fmt: M.money, scale: 'low' },
     { k: 'cpc', label: 'CPC', fmt: M.money, scale: 'low' }, { k: 'ctr', label: 'CTR', fmt: M.pct1, scale: 'high' },
-    { k: 'lpv', label: 'LPV', fmt: M.int }, { k: 'ic', label: 'Checkouts', fmt: M.int }, { k: 'cpic', label: 'C/Checkout', fmt: M.money, scale: 'low' },
-    { k: 'vendas', label: 'Vendas', fmt: M.int }, { k: 'fat', label: 'Fat.', fmt: M.money }, { k: 'cac', label: 'CAC', fmt: M.money, scale: 'low' }, { k: 'roas', label: 'ROAS', fmt: M.x, scale: 'high' }
+    { k: 'lpv', label: 'LPV', fmt: M.int }, { k: 'connect', label: 'Connect', fmt: M.pct1, scale: 'high' },
+    { k: 'ic', label: 'Checkouts', fmt: M.int }, { k: 'lpCheck', label: 'PV→Check', fmt: M.pct1, scale: 'high' }, { k: 'cpic', label: 'C/Checkout', fmt: M.money, scale: 'low' },
+    { k: 'vendas', label: 'Vendas', fmt: M.int }, { k: 'convCheck', label: 'Check→Venda', fmt: M.pct1, scale: 'high' },
+    { k: 'fat', label: 'Fat.', fmt: M.money }, { k: 'cac', label: 'CAC', fmt: M.money, scale: 'low' }, { k: 'roas', label: 'ROAS', fmt: M.x, scale: 'high' }
   ];
   function renderDaily(from, to) {
     var rows = dailyRows(from, to).reverse();
@@ -612,11 +644,11 @@
     ];
 
     $('trafficView').innerHTML =
-      '<div class="scopenote"><span>🎯 Aba operacional: tudo aqui vem do <b>pixel (Adveronix)</b> — as métricas de mídia e a atribuição de compras por anúncio. Compras do pixel são <b>sinal de otimização</b>, não faturamento (o faturamento real é a Tutory, na Visão Geral).</span></div>' +
+      '<div class="scopenote"><span>🎯 Aba operacional: as <b>métricas de mídia</b> (CPM/CTR/CPC/LPV) vêm do <b>pixel (Adveronix)</b>; as <b>compras e o ROAS</b> vêm da <b>planilha de vendas (Tutory)</b>, atribuídas por UTM ao anúncio (venda real). Vendas sem UTM aparecem na linha <b>(Sem UTM)</b>.</span></div>' +
       '<div class="kpis">' + kpis.join('') + '</div>' +
       '<div class="panel"><h2>Investimento por funil <span style="font-weight:500;color:var(--ink-3)">— com imposto ×' + taxStr(TAX) + '</span></h2><div class="funil-grid" id="funilInv"></div></div>' +
       '<div class="panel"><h2>Otimização — Campanha › Conjunto › Anúncio</h2>' +
-      '<p class="note">Clique numa <b>campanha</b> pra abrir os conjuntos, e num conjunto pra abrir os anúncios. Clique nos cabeçalhos pra ordenar. Atribuição de compras por <b>pixel</b>. Heatmap: verde = melhor. (px) = pixel.</p>' +
+      '<p class="note">Clique numa <b>campanha</b> pra abrir os conjuntos, e num conjunto pra abrir os anúncios. Clique nos cabeçalhos pra ordenar. <b>Compras/ROAS = planilha de vendas (Tutory), atribuídas por UTM</b> — vendas sem rastreamento ficam na linha <b>(Sem UTM)</b>. Métricas de mídia vêm do pixel. Heatmap: verde = melhor.</p>' +
       '<div class="tblwrap"><table id="tbl" class="tree"></table></div></div>';
 
     renderFunilInv(from, to);
@@ -662,12 +694,13 @@
         '<td><span class="nm">' + caret + esc(r.label) + '</span></td>' +
         TCOLS.slice(1).map(function (c) { var st = c.scale ? shade(c.k, r[c.k]) : ''; var v = c.fmt(r[c.k]); return '<td>' + (st ? '<span class="cell-scale" style="' + st + '">' + v + '</span>' : v) + '</td>'; }).join('') + '</tr>';
     }
-    var RAW = ['spend', 'impr', 'reach', 'clk', 'lpv', 'pur', 'val'];
+    var RAW = ['spend', 'impr', 'reach', 'clk', 'lpv', 'pur', 'val', 'sold', 'soldFat'];
     var tot = tderive(camps.reduce(function (t, r) { RAW.forEach(function (k) { t[k] += r[k]; }); return t; }, tblank('')));
     var rows = flatten();
+    var nCamp = camps.filter(function (c) { return c.key !== '(Sem UTM)'; }).length;
     $('tbl').innerHTML = '<thead><tr>' + head + '</tr></thead><tbody>' +
       (rows.map(rowHTML).join('') || '<tr><td colspan="' + TCOLS.length + '" style="text-align:center;color:var(--ink-3);padding:32px">Sem dados no período.</td></tr>') +
-      '</tbody><tfoot><tr><td>Total — ' + camps.length + ' campanha(s)</td>' + TCOLS.slice(1).map(function (c) { return '<td>' + c.fmt(tot[c.k]) + '</td>'; }).join('') + '</tr></tfoot>';
+      '</tbody><tfoot><tr><td>Total — ' + nCamp + ' campanha(s)</td>' + TCOLS.slice(1).map(function (c) { return '<td>' + c.fmt(tot[c.k]) + '</td>'; }).join('') + '</tr></tfoot>';
     Array.prototype.forEach.call(document.querySelectorAll('#tbl tbody tr.exp'), function (tr) {
       tr.querySelector('td:first-child').onclick = function () { var k = decodeURIComponent(tr.dataset.key); STATE.expanded[k] = !STATE.expanded[k]; renderTree(from, to); };
     });
@@ -712,15 +745,16 @@
 
       '<div class="rep-sec"><div class="step">4 · DIA A DIA</div><h3>📅 Funil por dia</h3>' + dTbl + '</div>' +
 
-      '<div class="rep-sec"><div class="step">5 · CAMPANHAS</div><h3>🗂️ Investimento e compras (pixel)</h3>' +
-      '<div class="tblwrap"><table style="min-width:520px"><thead><tr><th style="text-align:left">Campanha</th><th>Gasto</th><th>CTR</th><th>CPC</th><th>Compras (px)</th><th>Custo/compra</th></tr></thead><tbody>' +
-      camps.filter(function (c) { return c.spend > 0; }).sort(function (a, b) { return b.spend - a.spend; }).map(function (c) { return '<tr><td style="text-align:left">' + esc(c.label) + '</td><td>' + M.money(c.spend) + '</td><td>' + M.pct1(c.ctr) + '</td><td>' + M.money(c.cpc) + '</td><td>' + int(c.pur) + '</td><td>' + M.money(c.custoCompra) + '</td></tr>'; }).join('') + '</tbody></table></div></div>' +
+      '<div class="rep-sec"><div class="step">5 · CAMPANHAS</div><h3>🗂️ Investimento e compras (planilha)</h3>' +
+      '<div class="tblwrap"><table style="min-width:520px"><thead><tr><th style="text-align:left">Campanha</th><th>Gasto</th><th>CTR</th><th>CPC</th><th>Compras</th><th>Custo/compra</th></tr></thead><tbody>' +
+      camps.filter(function (c) { return c.spend > 0; }).sort(function (a, b) { return b.spend - a.spend; }).map(function (c) { return '<tr><td style="text-align:left">' + esc(c.label) + '</td><td>' + M.money(c.spend) + '</td><td>' + M.pct1(c.ctr) + '</td><td>' + M.money(c.cpc) + '</td><td>' + int(c.sold) + '</td><td>' + M.money(c.soldCusto) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+      (function () { var attr = camps.filter(function (c) { return c.key !== '(Sem UTM)'; }).reduce(function (s, c) { return s + (c.sold || 0); }, 0); var gap = (cur.vendas || 0) - attr; return '<p class="rep-p muted">Compras atribuídas por <b>UTM da planilha</b> (venda real da Tutory).' + (gap > 0 ? ' ' + attr + ' de ' + int(cur.vendas) + ' venda(s) têm rastreamento; ' + gap + ' sem UTM não são atribuíveis a um anúncio.' : '') + '</p>'; })() + '</div>' +
 
       '<div class="rep-sec"><div class="step">6 · MELHORES ANÚNCIOS</div><h3>🏆 Destaques pra produzir mais</h3>' +
       (function () {
-        var b = ads.filter(function (a) { return a.pur > 0; }).sort(function (a, z) { return (z.pur - a.pur) || (a.custoCompra - z.custoCompra); }).slice(0, 6);
-        return b.length ? b.map(function (a) { return '<div class="rep-ad"><div><span class="nm">' + esc(a.label) + '</span> <span class="mt">· ' + int(a.pur) + ' compra(s) px · custo/compra ' + M.money(a.custoCompra) + ' · ' + M.money(a.spend) + ' gastos</span></div><input data-adlink="' + encodeURIComponent(a.label) + '" placeholder="cole o link do anúncio (Instagram)"></div>'; }).join('')
-          : '<p class="rep-p muted">Sem compras atribuídas a um anúncio específico no período (pixel).</p>';
+        var b = ads.filter(function (a) { return a.sold > 0; }).sort(function (a, z) { return (z.sold - a.sold) || (a.soldCusto - z.soldCusto); }).slice(0, 6);
+        return b.length ? b.map(function (a) { return '<div class="rep-ad"><div><span class="nm">' + esc(a.label) + '</span> <span class="mt">· ' + int(a.sold) + ' compra(s) · custo/compra ' + M.money(a.soldCusto) + ' · ' + M.money(a.spend) + ' gastos</span></div><input data-adlink="' + encodeURIComponent(a.label) + '" placeholder="cole o link do anúncio (Instagram)"></div>'; }).join('')
+          : '<p class="rep-p muted">Sem vendas com UTM atribuídas a um anúncio específico no período.</p>';
       })() + '</div>';
 
     /* ---- briefing do gestor (interno) ---- */
@@ -755,14 +789,14 @@
 
     // campanhas / anúncios (via pixel + gasto)
     var active = camps.filter(function (c) { return c.spend > 0; });
-    var burning = ads.filter(function (a) { return a.spend >= cur.ticket * 2 && a.pur === 0; }).sort(function (a, b) { return b.spend - a.spend; }).slice(0, 4);
-    var winners = ads.filter(function (a) { return a.pur > 0 && ok(a.custoCompra); }).sort(function (a, b) { return a.custoCompra - b.custoCompra; }).slice(0, 4);
+    var burning = ads.filter(function (a) { return a.spend >= cur.ticket * 2 && (a.sold || 0) === 0; }).sort(function (a, b) { return b.spend - a.spend; }).slice(0, 4);
+    var winners = ads.filter(function (a) { return a.sold > 0 && ok(a.soldCusto); }).sort(function (a, b) { return a.soldCusto - b.soldCusto; }).slice(0, 4);
     var campHtml = '';
-    if (winners.length) campHtml += '<p><span class="rep-flag g">CAMPEÕES</span> menor custo/compra (pixel):</p><ul>' + winners.map(function (a) { return '<li><b>' + esc(a.label) + '</b> — ' + int(a.pur) + ' compra(s) px, custo/compra ' + M.money(a.custoCompra) + ', ' + M.money(a.spend) + ' gastos.</li>'; }).join('') + '</ul>';
-    if (burning.length) campHtml += '<p style="margin-top:10px"><span class="rep-flag r">QUEIMANDO VERBA</span> gasto relevante sem compra (pixel):</p><ul>' + burning.map(function (a) { return '<li><b>' + esc(a.label) + '</b> — ' + M.money(a.spend) + ' gastos, 0 compra px — candidato a pausar/revisar criativo.</li>'; }).join('') + '</ul>';
+    if (winners.length) campHtml += '<p><span class="rep-flag g">CAMPEÕES</span> menor custo/compra (planilha):</p><ul>' + winners.map(function (a) { return '<li><b>' + esc(a.label) + '</b> — ' + int(a.sold) + ' compra(s), custo/compra ' + M.money(a.soldCusto) + ', ' + M.money(a.spend) + ' gastos.</li>'; }).join('') + '</ul>';
+    if (burning.length) campHtml += '<p style="margin-top:10px"><span class="rep-flag r">QUEIMANDO VERBA</span> gasto relevante sem compra (planilha):</p><ul>' + burning.map(function (a) { return '<li><b>' + esc(a.label) + '</b> — ' + M.money(a.spend) + ' gastos, 0 compra — candidato a pausar/revisar criativo.</li>'; }).join('') + '</ul>';
     if (!campHtml) campHtml = '<p class="rep-p muted">Ainda sem volume por anúncio pra separar campeões de perdedores com segurança.</p>';
-    campHtml += '<p class="rep-p muted" style="margin-top:8px">Atribuição por pixel — sinal de otimização, não faturamento. Não sei o que você já pausou.</p>';
-    var campX = 'Campeões (custo/compra px): ' + (winners.map(function (a) { return a.label + ' (' + M.money(a.custoCompra) + ')'; }).join('; ') || '—') + '.\nQueimando verba: ' + (burning.map(function (a) { return a.label + ' (' + M.money(a.spend) + ', 0 compra)'; }).join('; ') || '—') + '.';
+    campHtml += '<p class="rep-p muted" style="margin-top:8px">Atribuição por <b>UTM da planilha</b> (venda real) — só vendas com UTM aparecem por anúncio; as sem UTM não são atribuíveis. Não sei o que você já pausou.</p>';
+    var campX = 'Campeões (custo/compra): ' + (winners.map(function (a) { return a.label + ' (' + M.money(a.soldCusto) + ')'; }).join('; ') || '—') + '.\nQueimando verba: ' + (burning.map(function (a) { return a.label + ' (' + M.money(a.spend) + ', 0 compra)'; }).join('; ') || '—') + '.';
     brief.push({ t: 'Campanhas / anúncios', h: campHtml, x: campX });
 
     // insights e gargalos
@@ -772,8 +806,8 @@
     if (cur.vendas > 0 && ok(cur.roas) && cur.roas < 1) ins.push(['⛔', '<b>Maior gargalo — conversão em venda:</b> ROAS ' + M.x(cur.roas) + ' (abaixo de 1x). Com CTR/CPC ótimos, o furo está na oferta/página/checkout ou no volume ainda pequeno de vendas (' + int(cur.vendas) + ').']);
     if (cur.lpv < cur.clk * 0.3) ins.push(['🔎', '<b>Rastreamento suspeito:</b> só ' + int(cur.lpv) + ' page views pra ' + int(cur.clk) + ' cliques. Provável pixel de LPV não disparando na landing — corrigir pra enxergar a connect rate real e o funil de verdade.']);
     if (cur.vendas === 0 && cur.spend > 0) ins.push(['⏳', '<b>Sem venda ainda:</b> ' + M.money(cur.spend) + ' investidos, 0 venda no período. Se o topo está bom, priorize testar oferta/página e garantir o rastreamento antes de aumentar verba.']);
-    burning.slice(0, 2).forEach(function (a) { ins.push(['🔥', '<b>Queimando verba:</b> "' + esc(a.label) + '" gastou ' + M.money(a.spend) + ' sem compra (pixel) — candidato a pausar.']); });
-    winners.slice(0, 2).forEach(function (a) { ins.push(['⭐', '<b>Pode surpreender:</b> "' + esc(a.label) + '" custo/compra ' + M.money(a.custoCompra) + ' com ' + int(a.pur) + ' compra(s) px — colocar mais verba e criar variações.']); });
+    burning.slice(0, 2).forEach(function (a) { ins.push(['🔥', '<b>Queimando verba:</b> "' + esc(a.label) + '" gastou ' + M.money(a.spend) + ' sem compra (planilha) — candidato a pausar.']); });
+    winners.slice(0, 2).forEach(function (a) { ins.push(['⭐', '<b>Pode surpreender:</b> "' + esc(a.label) + '" custo/compra ' + M.money(a.soldCusto) + ' com ' + int(a.sold) + ' compra(s) — colocar mais verba e criar variações.']); });
     ins.push(['🧭', ok(cur.roas) && cur.roas >= 1 ? '<b>Resumo:</b> retorno acima de 1x — momento de escalar com cuidado mantendo o CAC.' : '<b>Resumo:</b> topo saudável, retorno ainda baixo. A alavanca do período é conversão (oferta/página/checkout) + rastreamento, não mais tráfego.']);
     var insHtml = '<div>' + ins.map(function (i) { return '<div class="insight"><span class="ico">' + i[0] + '</span><span class="tx">' + i[1] + '</span></div>'; }).join('') + '</div>';
     brief.push({ t: 'Insights e gargalos', h: insHtml, x: ins.map(function (i) { return '• ' + i[1].replace(/<[^>]+>/g, ''); }).join('\n') });

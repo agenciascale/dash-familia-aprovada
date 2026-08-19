@@ -193,16 +193,18 @@ Write-Host "Baixando Vendas (Tutory)..."
 $v = Get-Csv $SHEET_VENDAS $GID_VENDAS
 $dv = @{}       # date -> { vendas, fat }   (total do lancamento, por dia)
 $salesCamp = @{}  # date -> campDecoded -> { vendas, fat }   (atribuido por utm_campaign)
+$salesGrain = @{} # "d|camp|adset|ad" -> {d,camp,adset,ad,vendas,fat}  (atribuicao por ANUNCIO p/ a Otimizacao)
 $attrAd = 0
 if ($v.Count -ge 1) {
   $HV = $v[0]
   $jDt   = ColIdx $HV 'DATA.?VENDA|DATA|DATE|CREATED|TIMESTAMP' $null
   $jCamp = ColIdx $HV 'UTM.?CAMPAIGN' $null
+  $jMed  = ColIdx $HV 'UTM.?MEDIUM' $null
   $jCont = ColIdx $HV 'UTM.?CONTENT' $null
   $jTerm = ColIdx $HV 'UTM.?TERM' $null
   $jFat  = ColIdx $HV 'FATURAMENTO|VALOR|VALUE|AMOUNT|PRICE|TOTAL' 'UTM'
   $jProd = ColIdx $HV 'PRODUTO|PRODUCT|OFERTA|PLANO' $null
-  Write-Host ("  colunas vendas: dt={0} utm_campaign={1} utm_content={2} utm_term={3} fat={4} prod={5}" -f $jDt,$jCamp,$jCont,$jTerm,$jFat,$jProd)
+  Write-Host ("  colunas vendas: dt={0} utm_campaign={1} utm_medium={2} utm_content={3} utm_term={4} fat={5} prod={6}" -f $jDt,$jCamp,$jMed,$jCont,$jTerm,$jFat,$jProd)
   $skipHdr = $true
   foreach ($r in $v) {
     if ($skipHdr) { $skipHdr = $false; continue }
@@ -224,6 +226,19 @@ if ($v.Count -ge 1) {
     if (-not $salesCamp[$day].ContainsKey($campKey)) { $salesCamp[$day][$campKey] = @{ vendas=0; fat=0.0 } }
     $salesCamp[$day][$campKey].vendas += 1; $salesCamp[$day][$campKey].fat += $fat
     if ((UtmDecode (Cell $r $jCont)) -ne "") { $attrAd++ }
+    # ---- Atribuicao por ANUNCIO (Otimizacao) ----
+    # ATENCAO: neste checkout os UTMs vem "trocados" vs o padrao:
+    #   utm_medium   = NOME DA CAMPANHA  (ex.: "AGO26APC | ... | Teste de criativos")
+    #   utm_campaign = NOME DO CONJUNTO  (ex.: "AUTO | ALL | 35 a 45 | BR | Aberto ADV | 11")
+    #   utm_content  = NOME DO ANUNCIO   (ex.: "AD11 - Proxima carreira")
+    # Casa por NOME exato com o grain (Adveronix). Venda sem UTM -> bucket "(Sem UTM)".
+    $sCampAd  = UtmDecode (Cell $r $jMed)   # campanha
+    $sAdsetAd = $utmCamp                     # conjunto (utm_campaign, ja decodificado acima)
+    $sAdAd    = UtmDecode (Cell $r $jCont)   # anuncio
+    if ($sCampAd -eq "" -and $sAdAd -eq "") { $sCampAd = "(Sem UTM)"; $sAdsetAd = "(Sem UTM)"; $sAdAd = "(Sem UTM)" }
+    $gk = "$day|$sCampAd|$sAdsetAd|$sAdAd"
+    if (-not $salesGrain.ContainsKey($gk)) { $salesGrain[$gk] = [ordered]@{ d=$day; camp=$sCampAd; adset=$sAdsetAd; ad=$sAdAd; vendas=0; fat=0.0 } }
+    $salesGrain[$gk].vendas += 1; $salesGrain[$gk].fat += $fat
   }
 }
 $totVendas = 0; ($dv.Values | ForEach-Object { $totVendas += $_.vendas })
@@ -237,6 +252,16 @@ foreach ($day in $salesCamp.Keys) {
     $salesList.Add([ordered]@{ d=$day; camp=$cmp; vendas=$s.vendas; fat=[math]::Round($s.fat,2) })
   }
 }
+
+# achata salesGrain -> lista [{d,camp,adset,ad,vendas,fat}] (atribuicao por anuncio p/ a Otimizacao)
+$salesGrainList = New-Object System.Collections.Generic.List[object]
+foreach ($gk in $salesGrain.Keys) {
+  $s = $salesGrain[$gk]; $s.fat = [math]::Round($s.fat, 2)
+  $salesGrainList.Add($s)
+}
+$attrTot = 0; ($salesGrainList | Where-Object { $_.camp -ne "(Sem UTM)" } | ForEach-Object { $attrTot += $_.vendas })
+$noUtmTot = 0; ($salesGrainList | Where-Object { $_.camp -eq "(Sem UTM)" } | ForEach-Object { $noUtmTot += $_.vendas })
+Write-Host ("  vendas atribuidas por anuncio (UTM): {0} | sem UTM: {1}" -f $attrTot, $noUtmTot)
 
 # ---------------- MERGE daily ----------------
 $allDays = New-Object System.Collections.Generic.SortedSet[string]
@@ -267,6 +292,7 @@ $js = "window.DASH=" + ($meta | ConvertTo-Json -Compress -Depth 5) + ";" + [Envi
 $js += "window.DASH.daily=" + (JsonStr $daily) + ";" + [Environment]::NewLine
 $js += "window.DASH.grain=" + (JsonStr $grain) + ";" + [Environment]::NewLine
 $js += "window.DASH.sales=" + (JsonStr $salesList) + ";" + [Environment]::NewLine
+$js += "window.DASH.salesGrain=" + (JsonStr $salesGrainList) + ";" + [Environment]::NewLine
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($OutFile, $js, $utf8NoBom)
