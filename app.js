@@ -585,7 +585,7 @@
       { n: 'Cliques', big: M.int(c.clk), bg: '#63b015', ink: '#0c1400', cl: 'CPC', cv: M.money(c.cpc), sub: 'Clique → Page view <b>' + pctOr(c.connect) + '</b>' },
       { n: 'Page views', big: M.int(c.lpv), bg: '#4a8a0a', ink: '#fff', cl: 'Custo / Page view', cv: M.money(c.cpl), sub: 'Page view → Checkout <b>' + pctOr(c.lpCheck) + '</b>' },
       { n: 'Checkouts (IC)', big: M.int(c.ic), bg: '#356606', ink: '#fff', cl: 'Custo / Checkout', cv: M.money(c.cpic), sub: 'Checkout → Venda <b>' + pctOr(c.convCheck) + '</b>' },
-      { n: 'Ingressos (Tutory)', big: M.int(c.vendas), bg: '#244a04', ink: '#fff', cl: 'CPA', cv: M.money(c.cac), sub: 'meta ≤ <b>' + M.money0(CPA_TARGET) + '</b> · limite <b>' + M.money0(CPA_LIMIT) + '</b>' }
+      { n: 'Ingressos', big: M.int(c.vendas), bg: '#244a04', ink: '#fff', cl: 'CPA', cv: M.money(c.cac), sub: 'meta ≤ <b>' + M.money0(CPA_TARGET) + '</b> · limite <b>' + M.money0(CPA_LIMIT) + '</b>' }
     ];
     $('funnel').innerHTML = stages.map(function (s) {
       return '<div class="fstage"><div class="fl" style="background:' + s.bg + ';color:' + s.ink + '"><div class="fn">' + s.n + '</div><div class="fv">' + s.big + '</div></div>' +
