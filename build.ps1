@@ -211,7 +211,8 @@ if ($v.Count -ge 1) {
     $dt = ("$(Cell $r $jDt)").Trim()
     $day = ""
     if ($dt -match '^(\d{4})-(\d{2})-(\d{2})') { $day = "{0}-{1}-{2}" -f $matches[1], $matches[2], $matches[3] }
-    elseif ($dt -match '^(\d{2})/(\d{2})/(\d{4})') { $day = "{0}-{1}-{2}" -f $matches[3], $matches[2], $matches[1] }
+    elseif ($dt -match '^(\d{1,2})/(\d{1,2})/(\d{4})') { $day = "{0}-{1}-{2}" -f $matches[3], $matches[2].PadLeft(2,'0'), $matches[1].PadLeft(2,'0') }
+    elseif ($dt -match '^(\d{1,2})\.(\d{1,2})\.(\d{4})') { $day = "{0}-{1}-{2}" -f $matches[3], $matches[2].PadLeft(2,'0'), $matches[1].PadLeft(2,'0') }  # dd.mm.yyyy (Tutory as vezes grava a data como TEXTO com pontos)
     else { continue }
     $utmCamp = UtmDecode (Cell $r $jCamp)
     $prod    = ("$(Cell $r $jProd)").Trim()
